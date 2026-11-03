@@ -1,0 +1,17 @@
+# Local OS and Python artifacts
+.DS_Store
+__pycache__/
+*.py[cod]
+
+# Generated preparation structures and reports
+*_zhou_protonated*.pdb
+*_zhou_protonated*.json
+*_zhou_capped*.pdb
+*_zhou_capped*.json
+
+# Generated minimization structures, animation frames, reports, and logs
+*_hydrogen_relaxation*.pdb
+*_hydrogen_relaxation*.json
+*_full_relaxation*.pdb
+*_full_relaxation*.json
+*.log

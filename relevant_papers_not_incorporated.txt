@@ -1,0 +1,105 @@
+RELEVANT PAPERS NOT YET INCORPORATED
+Compiled and checked: 2026-11-03
+
+Scope: additional reading relevant to the current tau/MAP2 stack analysis.
+These studies have not supplied adopted parameters or analysis steps. Notes
+describe why they may be useful and where their conclusions do not transfer.
+
+1. Duan, P., Dregni, A. J., El Mammeri, N., & Hong, M. (2023).
+   Structure of the nonhelical filament of the Alzheimer's disease tau core.
+   Proceedings of the National Academy of Sciences, 120(44), e2310067120.
+   https://doi.org/10.1073/pnas.2310067120
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC10622913/
+
+   Relevance: Solid-state NMR supports a positively charged H329 and a
+   protonated, neutral E338 in a nonhelical tau assembly grown under acidic
+   conditions. Shows how local packing and solution conditions can change
+   protonation and fibril structure. It does not establish the histidine
+   states of 5O3L at neuronal pH.
+   Citation correction: This is the paper previously called “Dregni et al.”
+   in our conversation. Its first author is Duan; Dregni is second author.
+
+2. Davidson, D. S., Brown, A. M., & Lemkul, J. A. (2018).
+   Insights into Stabilizing Forces in Amyloid Fibrils of Differing Sizes
+   from Polarizable Molecular Dynamics Simulations.
+   Journal of Molecular Biology, 430(20), 3819–3834.
+   https://doi.org/10.1016/j.jmb.2018.05.020
+   https://pubmed.ncbi.nlm.nih.gov/29782833/
+
+   Relevance: Simulates amyloid fibrils, including AD tau, to examine how
+   electrostatics, water, and interfaces contribute to structural stability.
+   A useful precedent for investigating stack size and environmental effects.
+   It uses a polarizable model, which we have not selected. The available
+   methods excerpt identifies 5O3L and 5O3T; its complete histidine assignment
+   was not verified in our literature check and should not be inferred.
+
+3. Duan, P., El Mammeri, N., & Hong, M. (2024).
+   Milligram-scale assembly and NMR fingerprint of tau fibrils adopting the
+   Alzheimer's disease fold.
+   Journal of Biological Chemistry, 300(6), 107326.
+   https://doi.org/10.1016/j.jbc.2024.107326
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC11145547/
+
+   Relevance: Provides experimental methods and NMR fingerprints for
+   recombinant tau adopting the AD-like core fold. Useful for distinguishing
+   a shared core shape from different filament packing and for seeing how
+   preparation conditions affect the resulting structure. We have not
+   extracted a complete histidine protonation map from this paper.
+
+4. Charafeddine, R. A., Cortopassi, W. A., Lak, P., Tan, R., McKenney, R. J.,
+   Jacobson, M. P., Barber, D. L., & Wittmann, T. (2019).
+   Tau repeat regions contain conserved histidine residues that modulate
+   microtubule-binding in response to changes in pH.
+   Journal of Biological Chemistry, 294(22), 8779–8790.
+   https://doi.org/10.1074/jbc.RA118.007004
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC6552421/
+
+   Relevance: Demonstrates that histidines can make tau interactions
+   sensitive to pH. Useful biological background for taking protonation
+   seriously. The system is tau bound to microtubules, not an AD fibril;
+   its protonation behavior should not be transferred directly to our stack.
+
+5. Lövestam, S., Koh, F. A., van Knippenberg, B., Kotecha, A., Murzin, A. G.,
+   Goedert, M., & Scheres, S. H. W. (2022).
+   Assembly of recombinant tau into filaments identical to those of
+   Alzheimer's disease and chronic traumatic encephalopathy.
+   eLife, 11, e76494.
+   https://doi.org/10.7554/eLife.76494
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC8983045/
+
+   Relevance: Shows that shortened recombinant tau can form disease-relevant
+   folds under particular laboratory conditions. Useful context for our
+   core-only working hypothesis and for the role of salts and conditions in
+   selecting folds. It does not by itself validate our exact capped fragment,
+   finite stack, or chosen simulation environment.
+
+6. Olsson, M. H. M., Søndergaard, C. R., Rostkowski, M., & Jensen, J. H. (2011).
+   PROPKA3: Consistent Treatment of Internal and Surface Residues in Empirical
+   pKa Predictions.
+   Journal of Chemical Theory and Computation, 7(2), 525–537.
+   https://doi.org/10.1021/ct100578z
+
+   Relevance: Describes a tool that estimates how the local protein structure
+   shifts residue pKa values. Could help narrow plausible protonation choices
+   before a sensitivity study. Estimates are model-dependent; they do not
+   experimentally determine the states or by themselves resolve every
+   neutral-histidine tautomer choice. PROPKA has not been run for this project.
+
+7. Søndergaard, C. R., Olsson, M. H. M., Rostkowski, M., & Jensen, J. H. (2011).
+   Improved Treatment of Ligands and Coupling Effects in Empirical Calculation
+   and Rationalization of pKa Values.
+   Journal of Chemical Theory and Computation, 7(7), 2284–2295.
+   https://doi.org/10.1021/ct200133y
+
+   Relevance: Companion PROPKA methods paper covering refinements including
+   coupling between ionizable groups. Relevant if nearby histidines or other
+   charged residues influence one another. The PROPKA maintainers request
+   citation of both this paper and Olsson et al. if their tool is used.
+   Citation guidance: https://github.com/jensengroup/propka
+
+MOVE TO THE CURRENT-PROJECT LIST WHEN APPROPRIATE
+
+If one of these papers supplies an adopted method, parameter choice, or a
+specific claim in our analysis, record that use and move its entry to
+citations_current_project.txt. Merely reading or listing a paper does not
+mean its experimental conditions or simulation protocol apply to our system.

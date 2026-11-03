@@ -1,0 +1,91 @@
+CURRENT PROJECT CITATIONS — TAU / MAP2 FIBRIL ENERGETICS
+Compiled and checked: 2026-11-03
+
+Scope: references for the structures, predictions, and proposed relaxation
+workflow discussed so far. This is a working bibliography, not an exhaustive
+literature review. Status distinguishes actual inputs from proposed methods;
+listing a method does not mean it has been run or its parameters adopted.
+
+1. Fitzpatrick, A. W. P., et al. (2017).
+   Cryo-EM structures of tau filaments from Alzheimer's disease.
+   Nature, 547, 185–190.
+   https://doi.org/10.1038/nature23002
+
+   Relevance: The experimental source of our AD tau reference structure,
+   5O3L (paired helical filament), and its straight-filament counterpart,
+   5O3T. Establishes the observed fold and protofilament packing against
+   which we compare predictions and assess our preparation protocol.
+   Status: Direct structural reference. The experimental fold does not
+   guarantee that a truncated finite stack will remain stable under every
+   simulation model.
+
+2. Protein Data Bank entry 5O3L (released 2017).
+   Paired helical filament in Alzheimer's disease brain.
+   https://doi.org/10.2210/pdb5o3l/pdb
+   https://www.rcsb.org/structure/5O3L
+
+   Relevance: The coordinate dataset underlying the full-filament and
+   single-protofilament reference files in this folder. Cite alongside
+   Fitzpatrick et al. when identifying the structural input.
+   Status: Direct input. See STRUCTURE_PROVENANCE.md for the local file
+   history and chain selection. This is a dataset citation, not another paper.
+
+3. Guo, L., Yu, Q., Wang, D., Wu, X., Wolynes, P. G., & Chen, M. (2025).
+   Generating the polymorph landscapes of amyloid fibrils using AI: RibbonFold.
+   Proceedings of the National Academy of Sciences, 122(16), e2501321122.
+   https://doi.org/10.1073/pnas.2501321122
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC12037047/
+
+   Relevance: Describes the predictor that generated our tau, MAP2, and
+   scrambled-tau candidate stacks. It constrains predictions to parallel,
+   in-register amyloid architecture and also examines shuffled sequences.
+   Status: Direct prediction-method citation. Predicted structures and their
+   frequencies are not automatically physical equilibrium populations, and
+   scrambled predictions are not guaranteed to collapse during relaxation.
+
+4. Zhou, Y., Li, J., Nordberg, A., & Ågren, H. (2021).
+   Dissecting the Binding Profile of PET Tracers to Corticobasal Degeneration
+   Tau Fibrils.
+   ACS Chemical Neuroscience, 12(18), 3487–3496.
+   https://doi.org/10.1021/acschemneuro.1c00536
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC8447187/
+
+   Relevance: Although the title emphasizes CBD, the methods also specify
+   histidine states for an AD tau model based on 5O3T:
+     H329: both ring nitrogens protonated; charge +1 (HIP).
+     H330: delta nitrogen protonated; neutral (HID).
+     H362: epsilon nitrogen protonated; neutral (HIE).
+     H374: epsilon nitrogen protonated; neutral (HIE).
+   Status: Informs a candidate starting assignment; not yet adopted in our
+   files. These are computational preparation choices, not experimentally
+   measured protonation states. Their 5O3T model differs from our 5O3L packing.
+
+5. Eastman, P., et al. (2017).
+   OpenMM 7: Rapid development of high performance algorithms for molecular
+   dynamics.
+   PLOS Computational Biology, 13(7), e1005659.
+   https://doi.org/10.1371/journal.pcbi.1005659
+
+   Relevance: Foundational reference for OpenMM, the proposed software for
+   evaluating forces and relaxing atom coordinates under a molecular model.
+   Status: Proposed software. OpenMM is the calculation engine; force-field,
+   solvent, protonation, and restraint choices still require specification.
+
+6. Eastman, P., et al. (2024).
+   OpenMM 8: Molecular Dynamics Simulation with Machine Learning Potentials.
+   The Journal of Physical Chemistry B, 128(1), 109–116.
+   https://doi.org/10.1021/acs.jpcb.3c06662
+   https://pmc.ncbi.nlm.nih.gov/articles/PMC10846090/
+
+   Relevance: Updated OpenMM software reference, potentially appropriate if
+   we use version 8. Including it does not commit us to a machine-learning
+   potential; the proposed workflow can use a conventional force field.
+   Status: Proposed software citation; record the actual version when used.
+
+TO ADD WHEN THE METHODS ARE DECIDED
+
+Add the papers for the actual force field, solvent/water model, ion parameters,
+and preparation tools we use. Those choices have not been finalized, so this
+file does not claim that any particular parameter set has been adopted.
+Related protonation tools and additional tau studies are listed separately in
+relevant_papers_not_incorporated.txt.
