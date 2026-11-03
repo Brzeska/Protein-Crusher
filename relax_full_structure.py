@@ -7,6 +7,8 @@ strength, dielectric 78.3/1, 298.15 K for screening only. No dynamics.
 Saves optimization frames every five iterations, plus initial/final frames.
 Outputs are never overwritten. Exit 2 means convergence/geometry needs review.
 A minimized structure alone does not establish thermodynamic stability.
+Automatically tries CUDA, HIP, then Metal; otherwise warns and uses CPU.
+OpenCL is not auto-selected because OpenCL devices may be CPUs.
 Requires preparation_checks.py alongside this script.
 """
 import argparse
@@ -17,6 +19,7 @@ import json
 from pathlib import Path
 import platform
 import time
+import warnings
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -127,6 +130,45 @@ class Progress(openmm.MinimizationReporter):
         return False
 
 
+def create_compute_context(system, threads):
+    """Try GPU-only backends; successful Context creation verifies availability.
+
+    OpenCL is not auto-selected because it can expose CPU devices as well.
+    Each attempt gets a fresh integrator, including after initialization failure.
+    """
+    available = {openmm.Platform.getPlatform(i).getName()
+                 for i in range(openmm.Platform.getNumPlatforms())}
+    failures = {}
+    for name in ('CUDA', 'HIP', 'Metal'):
+        if name not in available:
+            continue
+        backend = openmm.Platform.getPlatformByName(name)
+        properties = {'Precision': 'mixed'} if 'Precision' in backend.getPropertyNames() else {}
+        integrator = openmm.VerletIntegrator(0.001 * unit.picoseconds)
+        try:
+            context = openmm.Context(system, integrator, backend, properties)
+        except Exception as exc:
+            failures[name] = str(exc)
+            print(f'{name} GPU initialization failed: {exc}', flush=True)
+            continue
+        actual = {key: backend.getPropertyValue(context, key)
+                  for key in backend.getPropertyNames()}
+        print(f'Using {name} GPU acceleration.', flush=True)
+        return context, integrator, name, actual, failures
+    warnings.warn(
+        'No usable CUDA, HIP, or Metal GPU backend found. Falling back to CPU; '
+        'this will generally be significantly slower than a supported discrete GPU.',
+        RuntimeWarning, stacklevel=2)
+    backend = openmm.Platform.getPlatformByName('CPU')
+    properties = {'Threads': str(threads), 'DeterministicForces': 'true'}
+    integrator = openmm.VerletIntegrator(0.001 * unit.picoseconds)
+    context = openmm.Context(system, integrator, backend, properties)
+    actual = {key: backend.getPropertyValue(context, key)
+              for key in backend.getPropertyNames()}
+    print(f'Using CPU with {threads} threads.', flush=True)
+    return context, integrator, 'CPU', actual, failures
+
+
 def main():
     folder = Path(__file__).resolve().parent
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -169,10 +211,7 @@ def main():
     # Screen all atoms, including inherited heavy-atom contacts.
     indices = set(np.flatnonzero(movable).tolist())
     before_contacts = checks.contact_screen(topology, initial_nm * 10, indices)
-    integrator = openmm.VerletIntegrator(0.001 * unit.picoseconds)  # no MD steps taken
-    cpu = openmm.Platform.getPlatformByName('CPU')
-    properties = {'Threads': str(args.threads), 'DeterministicForces': 'true'}
-    context = openmm.Context(system, integrator, cpu, properties)
+    context, integrator, platform_name, properties, gpu_failures = create_compute_context(system, args.threads)
     context.setPositions(initial_nm * unit.nanometer)
     start_energy = context.getState(energy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
     checks.require(np.isfinite(start_energy), 'Nonfinite initial energy')
@@ -233,7 +272,8 @@ def main():
                   forcefield_files=forcefield_sources([args.protein_forcefield, f'implicit/{args.implicit_model}.xml']),
                   openmm=openmm.__version__, numpy=np.__version__, python=platform.python_version(),
                   settings={k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},
-                  platform='CPU', platform_properties=properties, elapsed_seconds=elapsed,
+                  platform=platform_name, platform_properties=properties,
+                  gpu_initialization_failures=gpu_failures, elapsed_seconds=elapsed,
                   implicit_solvent_kappa_per_nm=kappa, constraints=0, heavy_atoms_fixed=int((~movable).sum()),
                   mobile_atoms=int(movable.sum()), heavy_atom_max_shift_angstrom=heavy_shift,
                   aligned_heavy_atom_rmsd_angstrom=aligned_rmsd,
