@@ -15,3 +15,5 @@ __pycache__/
 *_full_relaxation*.pdb
 *_full_relaxation*.json
 *.log
+
+/Folds
