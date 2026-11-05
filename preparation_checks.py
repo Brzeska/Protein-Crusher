@@ -25,6 +25,69 @@ def require(ok, message):
         raise ValueError(message)
 
 
+def hydrogen_variant_arguments(topology, requested):
+    """Translate chemical CYM to OpenMM's no-S-H placement label CYX.
+
+    CYX here describes hydrogen occupancy only. Explicit CYM template selection
+    supplies thiolate parameters; it never creates a disulfide bond.
+    https://docs.openmm.org/latest/api-python/generated/openmm.app.modeller.Modeller.html
+    ff14SB supplies internal CYM, but not free-terminal NCYM/CCYM templates.
+    """
+    residues = list(topology.residues())
+    require(len(requested) == len(residues), 'Wrong variant-list length')
+    translated = list(requested)
+    templates = {}
+    bonded = {a: [] for a in topology.atoms()}
+    for a, b in topology.bonds():
+        bonded[a].append(b); bonded[b].append(a)
+    for r, variant in zip(residues, requested):
+        if variant != 'CYM':
+            continue
+        label = f'{r.chain.id}:{r.id}{r.insertionCode.strip()}'
+        require(r.name == 'CYS', f'{label}: CYM requires a CYS residue')
+        atoms = {a.name: a for a in r.atoms()}
+        require(all(n in atoms for n in ('SG', 'CB', 'N', 'C')),
+                f'{label}: incomplete cysteine heavy atoms')
+        sg_heavy = [a for a in bonded[atoms['SG']] if a.element != element.hydrogen]
+        require(sg_heavy == [atoms['CB']],
+                f'{label}: CYM cannot have a disulfide or other sulfur crosslink')
+        for name, partner in (('N', 'C'), ('C', 'N')):
+            require(any(a.residue != r and a.name == partner for a in bonded[atoms[name]]),
+                    f'{label}: CYM requires peptide-bonded or capped ends; free-terminal CYM is not supported')
+        translated[r.index] = 'CYX'
+        templates[r] = 'CYM'
+    return translated, templates
+
+
+def verify_cym(topology, system, requested, forcefield):
+    """Check actual parameters and sulfur occupancy, including after PDB reload."""
+    import openmm
+    from openmm import unit
+    residues = list(topology.residues())
+    targets = [r for r, v in zip(residues, requested) if v == 'CYM']
+    if not targets:
+        return []
+    require(len(requested) == len(residues), 'Wrong variant-list length')
+    hydrogen_variant_arguments(topology, requested)  # Recheck covalent context.
+    matched = forcefield.getMatchingTemplates(topology)
+    forces = [f for f in system.getForces() if isinstance(f, openmm.NonbondedForce)]
+    require(len(forces) == 1, 'Expected one NonbondedForce for CYM validation')
+    adjacency = neighbors(topology)
+    atoms = list(topology.atoms())
+    result = []
+    for r in targets:
+        label = f'{r.chain.id}:{r.id}{r.insertionCode.strip()}'
+        sg = next(a for a in r.atoms() if a.name == 'SG')
+        require(not any(atoms[i].element == element.hydrogen for i in adjacency[sg.index]),
+                f'{label}: CYM still has a sulfur hydrogen')
+        require(matched[r.index].name == 'CYM', f'{label}: did not match CYM force-field template')
+        charge = sum(forces[0].getParticleParameters(a.index)[0].value_in_unit(unit.elementary_charge)
+                     for a in r.atoms())
+        require(abs(charge + 1.0) < 1e-5, f'{label}: CYM charge is {charge}, expected -1')
+        result.append(dict(residue=label, template='CYM', charge_e=charge, sulfur_hydrogens=0))
+    return result
+
+
 def neighbors(topology):
     result = {a.index: set() for a in topology.atoms()}
     for a, b in topology.bonds():

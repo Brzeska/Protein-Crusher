@@ -177,8 +177,8 @@ def main():
         alternatives=[v for v in pairs[r.name] if v!=selected] if near or coupled else []
         if r.name=='HIS' and selected!='HIP':
             alternatives=sorted(set(alternatives+['HIE' if selected=='HID' else 'HID']))
-        supported=selected not in ('CYM','TYM','neutral_ARG')
-        if not supported:blocking.append(f'{k} favors {selected}, unsupported by the current hydrogen-adder interface; expert review/parameterization needed')
+        supported=selected not in ('TYM','neutral_ARG')
+        if not supported:blocking.append(f'{k} favors {selected}, unsupported by the current hydrogen-adder interface; additional preparation support is needed')
         elif r.name not in ('TYR','ARG'):overrides[k]=selected
         row.update(pka=pka,model_pka=float(g.model_pka),selected=selected,
                    independent_site_protonated_fraction=fraction,
@@ -191,13 +191,16 @@ def main():
         requested=[overrides.get(rkey(r)) for r in residues]
         candidate=Modeller(model.topology,model.positions);random.seed(2026)
         try:
-            candidate.addHydrogens(ff,pH=args.ph,variants=requested,platform=openmm.Platform.getPlatformByName('CPU'))
-            ff.createSystem(candidate.topology,nonbondedMethod=NoCutoff,constraints=None,rigidWater=False)
+            placement_variants, templates = checks.hydrogen_variant_arguments(candidate.topology, requested)
+            candidate.addHydrogens(ff,pH=args.ph,variants=placement_variants,
+                                   platform=openmm.Platform.getPlatformByName('CPU'),residueTemplates=templates)
+            system = ff.createSystem(candidate.topology,nonbondedMethod=NoCutoff,constraints=None,rigidWater=False)
+            checks.verify_cym(candidate.topology, system, requested, ff)
         except Exception as exc:blocking.append('Proposed assignment fails OpenMM compatibility check: '+str(exc))
     sweeps=[];unsupported_alternatives=[]
     for row in records:
         for alternative in row['alternatives']:
-            if alternative in ('CYM','TYM','neutral_ARG') or row['name'] in ('ARG','TYR'):
+            if alternative in ('TYM','neutral_ARG') or row['name'] in ('ARG','TYR'):
                 unsupported_alternatives.append(dict(residue=row['residue'],state=alternative));continue
             variant=overrides.copy();variant[row['residue']]=alternative
             sweeps.append(dict(changed_residue=row['residue'],alternative=alternative,variants=variant))

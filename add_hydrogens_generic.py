@@ -3,6 +3,7 @@
 
 Example: python add_hydrogens_generic.py --input capped.pdb --ph 7.0
 Optional --variants variants.json accepts {"A:8": "HIP", "A:14": "HIE"}.
+CYM requests negatively charged cysteine (thiolate), with peptide-bonded/capped ends.
 Keys are chain ID:residue ID with insertion code appended (e.g. A:14B).
 Existing hydrogens are rejected unless --existing-hydrogens keep or replace
 is specified. Keep retains existing H unless an explicit variant overrides it;
@@ -34,7 +35,7 @@ import preparation_checks as checks
 VARIANTS = {
     'ASP': {'ASP', 'ASH'}, 'GLU': {'GLU', 'GLH'},
     'HIS': {'HID', 'HIE', 'HIP', 'HIN'},
-    'CYS': {'CYS', 'CYX'}, 'LYS': {'LYS', 'LYN'},
+    'CYS': {'CYS', 'CYX', 'CYM'}, 'LYS': {'LYS', 'LYN'},
 }
 
 
@@ -155,11 +156,14 @@ def main():
     backend = choose_platform(args.platform)
     print('Adding hydrogens; existing heavy atoms remain fixed.',flush=True)
     try:
-        selected = modeller.addHydrogens(ff,pH=args.ph,variants=requested,platform=backend)
+        placement_variants, templates = checks.hydrogen_variant_arguments(modeller.topology, requested)
+        selected = modeller.addHydrogens(ff,pH=args.ph,variants=placement_variants,platform=backend,
+                                         residueTemplates=templates)
         system = ff.createSystem(modeller.topology, nonbondedMethod=NoCutoff,
                                  constraints=None,rigidWater=False,removeCMMotion=False)
     except Exception as exc:
         raise RuntimeError('Hydrogen addition/parameterization failed. Check missing heavy atoms, terminal OXT or caps, nonstandard residues, variant compatibility, and platform initialization. No output saved. OpenMM: '+str(exc)) from exc
+    cym_validation = checks.verify_cym(modeller.topology, system, requested, ff)
     keys, xyz = heavy_snapshot(modeller.topology,modeller.positions)
     checks.require(keys==original_keys and np.allclose(xyz,original_heavy,rtol=0,atol=1e-10),'Heavy atoms changed')
     checks.require(heavy_bonds(modeller.topology)==original_bonds,'Heavy-atom connectivity changed')
@@ -196,11 +200,16 @@ def main():
     checks.require([atom_key(a) for a in roundtrip.topology.atoms()]==[atom_key(a) for a in final_atoms],'PDB atom identities changed')
     bonds=lambda t: sorted(tuple(sorted((a.index,b.index))) for a,b in t.bonds())
     checks.require(bonds(roundtrip.topology)==bonds(modeller.topology),'PDB roundtrip changed bonds')
+    roundtrip_system = ff.createSystem(roundtrip.topology, nonbondedMethod=NoCutoff,
+                                       constraints=None, rigidWater=False, removeCMMotion=False)
+    checks.verify_cym(roundtrip.topology, roundtrip_system, requested, ff)
     report=dict(input=str(source),input_sha256=input_hash,output=str(output),
                 output_sha256=hashlib.sha256(text.encode()).hexdigest(),script_sha256=sha(__file__),
                 helper_sha256=sha(checks.__file__),forcefield_files=ff_hashes,
                 openmm=openmm.__version__,numpy=np.__version__,python=pyplatform.python_version(),
                 settings={k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},
+                cysteine_thiolate_validation=cym_validation,
+                cysteine_placement_note='CYM uses the OpenMM CYX no-S-H placement label with the CYM force-field template; no disulfide is created.',
                 platform=backend.getName(),overrides=overrides,residue_assignments=assignments,
                 original_hydrogens=n_old,final_hydrogens=sum(a.element==element.hydrogen for a in final_atoms),
                 heavy_atoms_preserved=True,forcefield_charge_per_chain=charges,
