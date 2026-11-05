@@ -1,0 +1,16 @@
+# Core Python dependencies (versions used in local pipeline testing).
+# Python 3.13 was used locally; the GPU pod used Python 3.12 for OpenMM.
+# Install from this repository: python -m pip install -r requirements.txt
+# Linux NVIDIA GPU pod: python -m pip install -r requirements-cuda.txt
+# These pin direct dependencies, not the entire transitive environment.
+openmm==8.6.1
+numpy==2.4.1
+propka==3.5.1
+
+# Additional requirements outside pip:
+# - Bash and standard Unix utilities for relax_pipeline.sh (macOS/Linux).
+# - NVIDIA GPU and compatible NVIDIA driver for CUDA execution on Linux.
+# - PyMOL is optional for viewing PDB files and animation frames.
+# ff14SB and GBn2 force-field XML files are bundled with OpenMM.
+# preparation_checks.py is a local helper; keep it beside the pipeline scripts.
+# Verify OpenMM after installation: python -m openmm.testInstallation

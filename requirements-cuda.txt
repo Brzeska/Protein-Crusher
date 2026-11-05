@@ -1,0 +1,4 @@
+# Linux NVIDIA GPU installation; includes all core dependencies.
+# Install: python -m pip install -r requirements-cuda.txt
+-r requirements.txt
+openmm[cuda12]==8.6.1

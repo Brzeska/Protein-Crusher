@@ -17,3 +17,6 @@ __pycache__/
 *.log
 
 /Folds
+
+# Generated end-to-end pipeline runs
+pipeline_runs/
