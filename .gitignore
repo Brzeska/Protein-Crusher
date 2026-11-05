@@ -20,3 +20,4 @@ __pycache__/
 
 # Generated end-to-end pipeline runs
 pipeline_runs/
+tests/
