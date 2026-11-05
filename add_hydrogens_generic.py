@@ -38,6 +38,10 @@ VARIANTS = {
     'CYS': {'CYS', 'CYX', 'CYM'}, 'LYS': {'LYS', 'LYN'},
 }
 
+# Absolute displacement guard: 0.0001 A, below PDB's 0.001 A resolution.
+# Accept numerical roundoff only, then restore original coordinates exactly.
+HEAVY_ROUNDOFF_LIMIT_NM = 1e-5
+
 
 def sha(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
@@ -64,6 +68,29 @@ def heavy_snapshot(topology, positions):
 def heavy_bonds(topology):
     return sorted(tuple(sorted((atom_key(a), atom_key(b)))) for a,b in topology.bonds()
                   if a.element != element.hydrogen and b.element != element.hydrogen)
+
+
+def restore_heavy_coordinates(modeller, original_keys, original_heavy):
+    keys, xyz = heavy_snapshot(modeller.topology, modeller.positions)
+    checks.require(keys == original_keys, 'Heavy-atom identities changed during hydrogen placement')
+    positions = np.array(modeller.positions.value_in_unit(unit.nanometer), dtype=float, copy=True)
+    checks.require(np.isfinite(positions).all(), 'Nonfinite generated coordinates')
+    checks.require(xyz.shape == original_heavy.shape and np.isfinite(original_heavy).all(),
+                   'Invalid original heavy-atom coordinates')
+    displacement = np.linalg.norm(xyz-original_heavy, axis=1)
+    maximum = float(displacement.max()) if len(displacement) else 0.0
+    checks.require(maximum <= HEAVY_ROUNDOFF_LIMIT_NM,
+                   f'Heavy atoms moved {maximum:.12g} nm during hydrogen placement; '
+                   f'roundoff limit is {HEAVY_ROUNDOFF_LIMIT_NM:g} nm. Coordinates not restored.')
+    heavy_indices = [a.index for a in modeller.topology.atoms() if a.element != element.hydrogen]
+    positions[heavy_indices] = original_heavy
+    modeller.positions = unit.Quantity(positions, unit.nanometer)
+    restored_keys, restored = heavy_snapshot(modeller.topology, modeller.positions)
+    checks.require(restored_keys == original_keys and np.array_equal(restored, original_heavy),
+                   'Failed to restore original heavy-atom coordinates exactly')
+    return dict(max_displacement_before_restoration_nm=maximum,
+                roundoff_limit_nm=HEAVY_ROUNDOFF_LIMIT_NM,
+                original_heavy_coordinates_restored=True)
 
 
 def source_hashes(names):
@@ -164,9 +191,10 @@ def main():
     except Exception as exc:
         raise RuntimeError('Hydrogen addition/parameterization failed. Check missing heavy atoms, terminal OXT or caps, nonstandard residues, variant compatibility, and platform initialization. No output saved. OpenMM: '+str(exc)) from exc
     cym_validation = checks.verify_cym(modeller.topology, system, requested, ff)
-    keys, xyz = heavy_snapshot(modeller.topology,modeller.positions)
-    checks.require(keys==original_keys and np.allclose(xyz,original_heavy,rtol=0,atol=1e-10),'Heavy atoms changed')
     checks.require(heavy_bonds(modeller.topology)==original_bonds,'Heavy-atom connectivity changed')
+    coordinate_restoration = restore_heavy_coordinates(modeller, original_keys, original_heavy)
+    print(f'Heavy-atom numerical drift: {coordinate_restoration["max_displacement_before_restoration_nm"]:.6g} nm; '
+          'original coordinates restored exactly.', flush=True)
     checks.require(np.isfinite(modeller.positions.value_in_unit(unit.nanometer)).all(),'Nonfinite generated coordinates')
     checks.require(system.getNumParticles()==modeller.topology.getNumAtoms(),'Unexpected force-field extra particles')
     adjacency = checks.neighbors(modeller.topology)
@@ -209,6 +237,7 @@ def main():
                 openmm=openmm.__version__,numpy=np.__version__,python=pyplatform.python_version(),
                 settings={k:str(v) if isinstance(v,Path) else v for k,v in vars(args).items()},
                 cysteine_thiolate_validation=cym_validation,
+                heavy_coordinate_restoration=coordinate_restoration,
                 cysteine_placement_note='CYM uses the OpenMM CYX no-S-H placement label with the CYM force-field template; no disulfide is created.',
                 platform=backend.getName(),overrides=overrides,residue_assignments=assignments,
                 original_hydrogens=n_old,final_hydrogens=sum(a.element==element.hydrogen for a in final_atoms),
