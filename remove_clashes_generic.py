@@ -3,7 +3,7 @@
 
 Only severe heavy-atom overlaps (> --severe-overlap) trigger repair. Inputs without
 them are copied byte-for-byte without constructing an OpenMM Context.
-Triggered inputs use bonded forces, soft-core LJ, CA and trans-omega restraints.
+Triggered inputs use bonded forces, soft-core LJ, CA, trans-omega and L-chirality restraints.
 Exit 2 retains a candidate/report that failed convergence or geometry gates.
 Protonation is inherited: rerun assignment/H addition if affected pKa matters.
 """
@@ -25,9 +25,13 @@ from relax_full_structure_generic import build_system, bond_lengths, Progress
 from relax_hydrogens_generic import create_compute_context, forcefield_sources, kappa_nm, sha
 
 DEFAULT_ALPHAS = (0.5, 0.2, 0.05, 0.01, 0.001)
+DEFAULT_CHIRAL_K = 1000.
+# Normal L centers have signed volumes of ~2.4-2.8 A^3 (5O3L: 2.42-2.78), so the
+# chirality restraint is zero for them and only acts on flattening or inversion.
+CHIRAL_FLOOR_ANGSTROM3 = 2.0
 
 
-def build_soft_system(original, topology, initial_nm, ca_k=1000., omega_k=100.):
+def build_soft_system(original, topology, initial_nm, ca_k=1000., omega_k=100., chiral_k=DEFAULT_CHIRAL_K):
     """Clone, retaining only known bonded forces; never mutate the real system.
 
     Exact proposed softened LJ (including its attractive well). Exception pairs,
@@ -85,6 +89,20 @@ def build_soft_system(original, topology, initial_nm, ca_k=1000., omega_k=100.):
     for ids in geometry.peptide_torsions(topology):
         omega.addTorsion(*ids, [])
     system.addForce(omega)
+    # ff14SB has no chirality term; only angle bending resists inversion, and with
+    # 1-4 and electrostatic terms removed a deep overlap can push a substituent
+    # through the plane. v is the gate's own signed volume (A^3), so no dihedral
+    # sign convention is involved. Zero above chiral_floor; quadratic below it.
+    chiral = openmm.CustomCompoundBondForce(4,
+        'chiral_k*min(0, v/chiral_floor-1)^2; '
+        'v=1000*(ax*(by*cz-bz*cy)-ay*(bx*cz-bz*cx)+az*(bx*cy-by*cx)); '
+        'ax=x2-x1; ay=y2-y1; az=z2-z1; bx=x3-x1; by=y3-y1; bz=z3-z1; cx=x4-x1; cy=y4-y1; cz=z4-z1')
+    chiral.setName('Temporary L-chirality restraints')
+    chiral.addGlobalParameter('chiral_k', chiral_k)
+    chiral.addGlobalParameter('chiral_floor', CHIRAL_FLOOR_ANGSTROM3)
+    for center, arms in geometry.stereocenters(topology):
+        chiral.addBond([center, *arms], [])
+    system.addForce(chiral)
     return system
 
 
@@ -127,12 +145,14 @@ def main():
     p.add_argument('--alphas', type=float, nargs='+', default=DEFAULT_ALPHAS)
     p.add_argument('--ca-k', type=float, default=1000., help='kJ/mol/nm^2; energy is k*displacement^2/2')
     p.add_argument('--omega-k', type=float, default=100., help='kJ/mol, energy k*(1+cos(omega))')
+    p.add_argument('--chiral-k', type=float, default=DEFAULT_CHIRAL_K,
+                   help=f'kJ/mol; energy k*min(0, V/{CHIRAL_FLOOR_ANGSTROM3:g}-1)^2 on each gated stereocenter volume V (A^3)')
     p.add_argument('--severe-overlap', type=float, default=geometry.SEVERE_OVERLAP_ANGSTROM,
                    help='Angstrom; heavy-atom Bondi overlaps above this trigger cleanup and fail its gates')
     p.add_argument('--seed', type=int, default=2026)
     args = p.parse_args()
     checks.require(all(np.isfinite(v) and v > 0 for v in
-                       [args.threads, args.max_iterations, args.tolerance, args.save_every, args.ca_k, args.omega_k, *args.alphas]),
+                       [args.threads, args.max_iterations, args.tolerance, args.save_every, args.ca_k, args.omega_k, args.chiral_k, *args.alphas]),
                    'Settings must be finite and positive')
     checks.require(all(a > b for a, b in zip(args.alphas, args.alphas[1:])) and max(args.alphas) < 1,
                    'Alphas must decrease strictly and lie between zero and one')
@@ -159,7 +179,8 @@ def main():
                   script_sha256=sha(__file__), checks_sha256=sha(checks.__file__), geometry_sha256=sha(geometry.__file__),
                   openmm=openmm.__version__, numpy=np.__version__,
                   settings={k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
-                  contact_rule=checks.CONTACT_RULE, severe_overlap_angstrom=args.severe_overlap, contacts_before=contacts,
+                  contact_rule=checks.CONTACT_RULE, severe_overlap_angstrom=args.severe_overlap,
+                  chiral_floor_angstrom3=CHIRAL_FLOOR_ANGSTROM3, contacts_before=contacts,
                   triggered=bool(trigger), protonation_preserved=True)
     if not trigger:
         # Preserve the entire input file, including REMARK records and PDB rounding.
@@ -173,7 +194,7 @@ def main():
     print(f'Cleanup triggered by {len(trigger)} heavy-atom overlaps above {args.severe_overlap:g} A.', flush=True)
     fields = ['amber14/protein.ff14SB.xml', 'implicit/gbn2.xml']
     original, movable, _ = build_system(topology, fields, 1., 78.3, kappa_nm(.15, 298.15, 78.3))
-    soft = build_soft_system(original, topology, xyz, args.ca_k, args.omega_k)
+    soft = build_soft_system(original, topology, xyz, args.ca_k, args.omega_k, args.chiral_k)
     report['geometry_before'] = geometry.geometry_report(topology, xyz*10, contacts, severe_overlap=args.severe_overlap)
     start_nm, moved = separate_coincident_atoms(xyz, args.seed)
     context, integrator, backend, properties, failures = create_compute_context(soft, args.threads, args.platform)

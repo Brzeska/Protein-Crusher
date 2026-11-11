@@ -57,6 +57,29 @@ def peptide_torsions(topology):
     return rows
 
 
+def stereocenters(topology):
+    """(center, arms) atom indices gated for L-chirality: Calpha (not Gly/caps), Ile/Thr Cbeta.
+
+    The ordered triple product of the arm-minus-center vectors is positive for
+    standard L amino acids, including Cys (whose CIP label is R) and natural
+    Ile/Thr at CB.
+    """
+    rows = []
+    for residue in topology.residues():
+        names = {a.name: a.index for a in residue.atoms()}
+        centers = []
+        if residue.name not in ('GLY', 'ACE', 'NME'):
+            centers.append(('CA', ('N', 'C', 'CB')))
+        if residue.name == 'ILE':
+            centers.append(('CB', ('CA', 'CG1', 'CG2')))
+        if residue.name == 'THR':
+            centers.append(('CB', ('CA', 'OG1', 'CG2')))
+        for center, arms in centers:
+            checks.require(all(n in names for n in (center, *arms)), f'Incomplete stereocenter: {residue}')
+            rows.append((names[center], tuple(names[n] for n in arms)))
+    return rows
+
+
 def dihedral(points):
     a, b, c, d = np.asarray(points)
     axis = c-b
@@ -152,22 +175,10 @@ def geometry_report(topology, xyz, contacts=None, include_hydrogens=False,
         angle = dihedral(xyz[list(ids)])
         if angle is None or 180-abs(angle) > 30:
             omega.append(dict(atoms=[label(atoms[i]) for i in ids], omega_degrees=angle))
-    for residue in topology.residues():
-        names = {a.name: a.index for a in residue.atoms()}
-        centers = []
-        if residue.name not in ('GLY', 'ACE', 'NME'):
-            centers.append(('CA', ('N', 'C', 'CB')))
-        if residue.name == 'ILE':
-            centers.append(('CB', ('CA', 'CG1', 'CG2')))
-        if residue.name == 'THR':
-            centers.append(('CB', ('CA', 'OG1', 'CG2')))
-        for center, arms in centers:
-            checks.require(all(n in names for n in (center, *arms)), f'Incomplete stereocenter: {residue}')
-            # These ordered triples are positive for standard L amino acids,
-            # including Cys (whose CIP label is R) and natural Ile/Thr at CB.
-            volume = float(np.linalg.det([xyz[names[n]]-xyz[names[center]] for n in arms]))
-            if volume <= 0.5:
-                chirality.append(dict(atom=label(atoms[names[center]]), signed_volume_angstrom3=volume))
+    for center, arms in stereocenters(topology):
+        volume = float(np.linalg.det([xyz[i]-xyz[center] for i in arms]))
+        if volume <= 0.5:
+            chirality.append(dict(atom=label(atoms[center]), signed_volume_angstrom3=volume))
     piercings, malformed = ring_piercings(topology, xyz)
     all_contacts = checks.contact_screen(topology, xyz, set(range(len(atoms)))) if include_hydrogens else []
     hydrogen_rows = [r for r in all_contacts if r['category'] == 'steric_overlap' and r not in contacts]

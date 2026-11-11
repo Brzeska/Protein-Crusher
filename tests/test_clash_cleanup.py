@@ -106,6 +106,35 @@ class SoftForceTests(unittest.TestCase):
         self.assertAlmostEqual(energy(), 200.)
         del context, integrator
 
+    def test_chirality_restraint_zero_for_l_and_resists_flattening_and_inversion(self):
+        top = Topology(); r = top.addResidue('ALA', top.addChain('A'), '1')
+        for name, el in (('N', element.nitrogen), ('CA', element.carbon), ('C', element.carbon), ('CB', element.carbon)):
+            top.addAtom(name, el, r)
+        self.assertEqual(geometry.stereocenters(top), [(1, (0, 2, 3))])
+        original = openmm.System(); nb = openmm.NonbondedForce()
+        for _ in range(4):
+            original.addParticle(12.); nb.addParticle(0., .3, 0.)
+        original.addForce(nb)
+        # CA at the origin; N, C, CB along +x, +y, +z: signed volume +3.375 A^3 (L side).
+        l_form = np.array([[.15, 0, 0], [0., 0, 0], [0., .15, 0], [0., 0, .15]])
+        system = cleanup.build_soft_system(original, top, l_form)
+        integrator = openmm.VerletIntegrator(.001)
+        context = openmm.Context(system, integrator, openmm.Platform.getPlatformByName('Reference'))
+        def evaluate(xyz):
+            context.setPositions(xyz)
+            s = context.getState(energy=True, forces=True)
+            return (s.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole),
+                    s.getForces(asNumpy=True).value_in_unit(unit.kilojoule_per_mole/unit.nanometer))
+        k, floor = cleanup.DEFAULT_CHIRAL_K, cleanup.CHIRAL_FLOOR_ANGSTROM3
+        self.assertAlmostEqual(evaluate(l_form)[0], 0.)
+        flat = l_form.copy(); flat[3] = [.1, .1, 0.]
+        self.assertAlmostEqual(evaluate(flat)[0], k, places=4)
+        inverted = l_form.copy(); inverted[3, 2] *= -1
+        energy, force = evaluate(inverted)
+        self.assertAlmostEqual(energy, k*(-3.375/floor-1)**2, places=4)
+        self.assertGreater(force[3, 2], 0)  # pushes CB back toward the L side
+        del context, integrator
+
     def test_unknown_force_rejected(self):
         top, system = fixture()
         system.addForce(openmm.CustomExternalForce('x*x'))

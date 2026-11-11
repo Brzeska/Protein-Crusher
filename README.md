@@ -44,6 +44,13 @@ For clashing inputs, cleanup uses a temporary clone of the ff14SB/GBn2 system:
 - Restrain Cα positions with `0.5*k*displacement^2`, default
   `k=1000 kJ/mol/nm^2`, and peptide ω with `k*(1+cos(omega))`, default
   `k=100 kJ/mol`. Actual peptide bonds, including ACE/NME caps, define ω.
+- Hold L-chirality at every gated stereocenter (Cα except Gly, Ile/Thr Cβ) with
+  `k*min(0, V/2.0-1)^2`, default `k=1000 kJ/mol` (`--chiral-k`), where `V` is
+  the same signed volume in Å³ that the chirality gate checks. It is zero for
+  normal centers (about 2.4–2.8 Å³) and rises as a center flattens or inverts.
+  ff14SB has no chirality term, and with 1-4 and electrostatic terms removed a
+  deep overlap can otherwise push a substituent through the plane and invert
+  the center (observed on a RibbonFold model before this restraint).
 - Minimize at α = 0.5, 0.2, 0.05, 0.01, 0.001. Each round gets the pipeline's
   iteration budget and tolerance. Require finite energies/forces, nonincreasing
   energy within each round, and final-round force convergence. Intermediate
