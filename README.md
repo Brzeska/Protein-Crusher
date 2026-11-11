@@ -82,13 +82,21 @@ severe heavy-atom overlaps, all harmonic bond deviations (>0.10 Å), peptide C�
 lengths (outside 1.20–1.45 Å), ω more than 60° from trans, stereochemistry,
 and bonds passing through residue rings. Peptides 30–60° from trans are listed
 as `twisted_trans_peptides` but pass at this point: they are on the trans side
-of the ~90° barrier, and full relaxation flattens them downhill. The final
+of the ~90° barrier, so unrestrained relaxation can flatten them without
+crossing it, though it may not if the surrounding structure holds the twist. The final
 relaxed structure is checked with the usual 30° ω limit
 again by `validate_clash_output.py`, now including hydrogen overlaps. Both
 checks fail only on severe overlaps, using the threshold recorded in the cleanup
 report; smaller overlaps are listed as close contacts, not failures. Plausible
 hydrogen bonds and 1-4 contacts remain separately classified. The
 existing full-relaxation stage also gates all harmonic bond lengths.
+
+The final check records what it finds in `geometry_gate.json` (status
+`final_geometry_findings`) and lets the run finish, because the relaxed
+structure is the result being measured; for example, relaxing a RibbonFold
+model can leave a peptide twisted past 30°. The success summary prints the
+check's status. Run `validate_clash_output.py` with `--strict` to exit 2 on
+findings instead.
 
 Chirality checks assume standard L-proteins and cover Cα (except glycine) and
 the additional Ile/Thr Cβ centers, rejecting inverted or nearly planar centers

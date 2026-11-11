@@ -165,7 +165,8 @@ def geometry_report(topology, xyz, contacts=None, include_hydrogens=False,
 
     Peptides between 30 degrees and that limit are listed as twisted_trans_peptides:
     they are on the trans side of the ~90 degree barrier, so unrestrained
-    minimization flattens them downhill without crossing it.
+    minimization can flatten them without crossing it (it may not, if the
+    surrounding structure holds the twist).
     """
     checks.require(np.isfinite(severe_overlap) and severe_overlap >= 0.4,
                    'Severe overlap threshold must be finite and at least the 0.40 A screen')

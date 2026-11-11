@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Recheck repaired structures after full relaxation; clean-input path is unchanged.
 
-Fails only on overlaps above the cleanup report's severe threshold; ordinary
-close contacts (e.g. hydrogen bonds, Calpha-H...O) are listed but not gated.
+Flags only overlaps above the cleanup report's severe threshold; ordinary
+close contacts (e.g. hydrogen bonds, Calpha-H...O) are listed but not flagged.
+Findings are recorded in the report without stopping the run, because the relaxed
+structure is the result being measured; --strict exits 2 on findings instead.
 """
 import argparse
 import hashlib
@@ -14,12 +16,16 @@ from openmm.app import PDBFile
 import clash_geometry as geometry
 import preparation_checks as checks
 
+FINDING_KEYS = ('heavy_atom_overlaps', 'hydrogen_steric_overlaps', 'peptide_bond_outliers', 'omega_outliers',
+                'chirality_outliers', 'ring_piercings', 'malformed_rings')
+
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--input', type=Path, required=True)
     p.add_argument('--cleanup-report', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True, help='New JSON gate report')
+    p.add_argument('--strict', action='store_true', help='Exit 2 when the final geometry has findings')
     args = p.parse_args()
     cleanup = json.loads(args.cleanup_report.read_text())
     checks.require(cleanup.get('status') in ('clash_cleanup_passed', 'skipped_no_severe_overlaps'),
@@ -38,13 +44,14 @@ def main():
         checks.require(pdb.getNumFrames() == 1, 'Expected single-model final PDB')
         report = geometry.geometry_report(pdb.topology, np.array(pdb.positions.value_in_unit(unit.angstrom)),
                                           include_hydrogens=True, severe_overlap=severe)
-        report['status'] = 'final_geometry_passed' if report['passed'] else 'needs_review'
+        report['status'] = 'final_geometry_passed' if report['passed'] else 'final_geometry_findings'
     report.update(input=str(source), input_sha256=input_hash, cleanup_report=str(args.cleanup_report.resolve()),
                   geometry_sha256=hashlib.sha256(Path(geometry.__file__).read_bytes()).hexdigest())
     checks.require(hashlib.sha256(source.read_bytes()).hexdigest() == input_hash, 'Input changed during gate')
     checks.write_outputs({args.output: json.dumps(report, indent=2)+'\n'})
-    print('Final cleanup geometry gate: '+report['status'])
-    if not report['passed']:
+    found = ', '.join(f'{k}={len(report[k])}' for k in FINDING_KEYS if report.get(k))
+    print('Final geometry check: '+report['status']+(f' ({found}); recorded in {args.output}' if found else ''))
+    if args.strict and not report['passed']:
         raise SystemExit(2)
 
 

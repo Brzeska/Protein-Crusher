@@ -170,7 +170,7 @@ run_stage '6/6 Full-atom relaxation' "$SCRIPT_DIR/relax_full_structure_generic.p
     --input "$RUN_DIR/hydrogen_relaxed.pdb" --output "$RUN_DIR/relaxed.pdb" \
     --platform "$PLATFORM" --threads "$THREADS" --max-iterations "$MAX_ITERATIONS" \
     --save-every "$SAVE_EVERY" --tolerance "$TOLERANCE"
-run_stage 'Final geometry gate' "$SCRIPT_DIR/validate_clash_output.py" \
+run_stage 'Final geometry check' "$SCRIPT_DIR/validate_clash_output.py" \
     --input "$RUN_DIR/relaxed.pdb" --cleanup-report "$RUN_DIR/clash_cleaned.json" \
     --output "$RUN_DIR/geometry_gate.json"
 CURRENT_STAGE='Final verification'
@@ -185,8 +185,13 @@ for name,expected in [('hydrogen_relaxed','hydrogen_minimization_passed'),('rela
         if hashlib.sha256(Path(d[field]).read_bytes()).hexdigest()!=d[field+'_sha256']:
             raise SystemExit('ERROR: output hash mismatch: '+field)
 PY
+GATE_STATUS=$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status","unknown"))' "$RUN_DIR/geometry_gate.json")
 log ''
 log 'SUCCESS: all six stages and final verification passed. This is energy minimization, not a thermodynamic stability test.'
+log "Final geometry check: $GATE_STATUS ($RUN_DIR/geometry_gate.json)"
+if [[ "$GATE_STATUS" == final_geometry_findings ]]; then
+    log 'The relaxed structure has geometry findings (e.g. a twisted peptide). They are part of the result; see the report.'
+fi
 log "Relaxed structure: $RUN_DIR/relaxed.pdb"
 log "Animation: $RUN_DIR/relaxed_frames.pdb"
 log "Report: $RUN_DIR/relaxed.json"

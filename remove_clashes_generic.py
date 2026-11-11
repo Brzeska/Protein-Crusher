@@ -30,8 +30,8 @@ DEFAULT_CHIRAL_K = 1000.
 # chirality restraint is zero for them and only acts on flattening or inversion.
 CHIRAL_FLOOR_ANGSTROM3 = 2.0
 # After cleanup, only require each peptide to be on the trans side with margin
-# from the 90 degree barrier; full relaxation flattens the rest and the final
-# gate applies the usual 30 degree limit.
+# from the 90 degree barrier; full relaxation can flatten the rest, and the final
+# check reports any peptide still beyond the usual 30 degree limit.
 CLEANUP_MAX_OMEGA_DEVIATION = 60.
 
 

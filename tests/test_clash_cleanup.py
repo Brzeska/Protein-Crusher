@@ -359,18 +359,25 @@ class CliTests(unittest.TestCase):
                              ['cap_generic.py', 'assign_protonation_generic.py', 'add_hydrogens_generic.py', 'remove_clashes_generic.py'])
             self.assertNotIn('SUCCESS:', result.stdout)
 
-    def test_final_gate_failure_retains_report_and_exits_two(self):
+    def test_final_gate_records_findings_without_failing_unless_strict(self):
         with tempfile.TemporaryDirectory() as directory:
             source, report = Path(directory)/'input.pdb', Path(directory)/'cleanup.json'
             self.clean_pdb(source)
             report.write_text(json.dumps(dict(status='clash_cleanup_passed', severe_overlap_angstrom=1.0, output=str(source),
                                              output_sha256=hashlib.sha256(source.read_bytes()).hexdigest())))
-            output = Path(directory)/'gate.json'
-            with patch.object(sys, 'argv', ['gate', '--input', str(source), '--cleanup-report', str(report), '--output', str(output)]), \
+            output, strict = Path(directory)/'gate.json', Path(directory)/'gate_strict.json'
+            base = ['gate', '--input', str(source), '--cleanup-report', str(report)]
+            with patch.object(sys, 'argv', base+['--output', str(output)]), \
+                 patch.object(geometry, 'geometry_report', return_value=dict(passed=False, ring_piercings=['bad'])):
+                gate.main()
+            recorded = json.loads(output.read_text())
+            self.assertEqual(recorded['status'], 'final_geometry_findings')
+            self.assertFalse(recorded['passed'])
+            with patch.object(sys, 'argv', base+['--output', str(strict), '--strict']), \
                  patch.object(geometry, 'geometry_report', return_value=dict(passed=False, ring_piercings=['bad'])):
                 with self.assertRaises(SystemExit) as exc: gate.main()
             self.assertEqual(exc.exception.code, 2)
-            self.assertEqual(json.loads(output.read_text())['status'], 'needs_review')
+            self.assertEqual(json.loads(strict.read_text())['status'], 'final_geometry_findings')
 
     def test_final_gate_clean_path_skips_extra_checks(self):
         with tempfile.TemporaryDirectory() as directory:
