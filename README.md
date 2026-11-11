@@ -79,8 +79,11 @@ uses the documented defaults for α and restraints.
 
 Repaired PDB coordinates are reloaded and checked before hydrogen relaxation:
 severe heavy-atom overlaps, all harmonic bond deviations (>0.10 Å), peptide C–N
-lengths (outside 1.20–1.45 Å), trans ω deviations (>30°), stereochemistry,
-and bonds passing through residue rings. The final relaxed structure is checked
+lengths (outside 1.20–1.45 Å), ω more than 60° from trans, stereochemistry,
+and bonds passing through residue rings. Peptides 30–60° from trans are listed
+as `twisted_trans_peptides` but pass at this point: they are on the trans side
+of the ~90° barrier, and full relaxation flattens them downhill. The final
+relaxed structure is checked with the usual 30° ω limit
 again by `validate_clash_output.py`, now including hydrogen overlaps. Both
 checks fail only on severe overlaps, using the threshold recorded in the cleanup
 report; smaller overlaps are listed as close contacts, not failures. Plausible

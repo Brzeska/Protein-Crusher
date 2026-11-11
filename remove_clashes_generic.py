@@ -29,6 +29,10 @@ DEFAULT_CHIRAL_K = 1000.
 # Normal L centers have signed volumes of ~2.4-2.8 A^3 (5O3L: 2.42-2.78), so the
 # chirality restraint is zero for them and only acts on flattening or inversion.
 CHIRAL_FLOOR_ANGSTROM3 = 2.0
+# After cleanup, only require each peptide to be on the trans side with margin
+# from the 90 degree barrier; full relaxation flattens the rest and the final
+# gate applies the usual 30 degree limit.
+CLEANUP_MAX_OMEGA_DEVIATION = 60.
 
 
 def build_soft_system(original, topology, initial_nm, ca_k=1000., omega_k=100., chiral_k=DEFAULT_CHIRAL_K):
@@ -229,7 +233,8 @@ def main():
     bonds = lambda t: sorted(tuple(sorted((a.index, b.index))) for a, b in t.bonds())
     checks.require(atomkeys(topology) == atomkeys(reread.topology) and bonds(topology) == bonds(reread.topology), 'PDB roundtrip changed atoms or connectivity')
     written = np.array(reread.positions.value_in_unit(unit.nanometer))
-    gate = geometry.geometry_report(reread.topology, written*10, severe_overlap=args.severe_overlap)
+    gate = geometry.geometry_report(reread.topology, written*10, severe_overlap=args.severe_overlap,
+                                    max_omega_deviation=CLEANUP_MAX_OMEGA_DEVIATION)
     lengths = [r for r in bond_lengths(original, topology, written) if abs(r['deviation_angstrom']) > .10]
     accepted = bool(rounds[-1]['converged'] and all(r['energy_decreased'] for r in rounds) and gate['passed'] and not lengths)
     frames = io.StringIO()

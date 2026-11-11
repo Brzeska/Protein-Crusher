@@ -209,6 +209,27 @@ class GeometryTests(unittest.TestCase):
         top.addBond(atoms[1], atoms[2]); top.addBond(atoms[4], atoms[5])
         self.assertEqual(geometry.peptide_torsions(top), [(0, 1, 2, 3), (3, 4, 5, 6)])
 
+    def test_cleanup_gate_allows_twisted_trans_but_final_gate_does_not(self):
+        top = Topology(); chain = top.addChain('A')
+        first, second = top.addResidue('GLY', chain, '1'), top.addResidue('GLY', chain, '2')
+        ca1 = top.addAtom('CA', element.carbon, first); c1 = top.addAtom('C', element.carbon, first)
+        n2 = top.addAtom('N', element.nitrogen, second); ca2 = top.addAtom('CA', element.carbon, second)
+        for a, b in ((ca1, c1), (c1, n2), (n2, ca2)): top.addBond(a, b)
+        def place(omega):
+            t = np.radians(omega)
+            return np.array([[-.7, 1.3, 0.], [0., 0., 0.], [1.33, 0., 0.], [2.03, 1.3*np.cos(t), 1.3*np.sin(t)]])
+        xyz = place(145.)
+        self.assertAlmostEqual(geometry.dihedral(xyz), 145.)
+        final = geometry.geometry_report(top, xyz)
+        self.assertFalse(final['passed'])
+        self.assertEqual(len(final['omega_outliers']), 1)
+        after_cleanup = geometry.geometry_report(top, xyz, max_omega_deviation=cleanup.CLEANUP_MAX_OMEGA_DEVIATION)
+        self.assertTrue(after_cleanup['passed'])
+        self.assertEqual(len(after_cleanup['twisted_trans_peptides']), 1)
+        near_barrier = geometry.geometry_report(top, place(100.), max_omega_deviation=cleanup.CLEANUP_MAX_OMEGA_DEVIATION)
+        self.assertFalse(near_barrier['passed'])
+        self.assertEqual(len(near_barrier['omega_outliers']), 1)
+
     def test_chirality_inversion_and_flattening(self):
         top = Topology(); r = top.addResidue('ALA', top.addChain('A'))
         for name in ('CA', 'N', 'C', 'CB'): top.addAtom(name, element.carbon, r)

@@ -160,21 +160,30 @@ def ring_piercings(topology, xyz):
 
 
 def geometry_report(topology, xyz, contacts=None, include_hydrogens=False,
-                    severe_overlap=SEVERE_OVERLAP_ANGSTROM):
+                    severe_overlap=SEVERE_OVERLAP_ANGSTROM, max_omega_deviation=30.):
+    """Fail on omega more than max_omega_deviation from trans (30 for final structures).
+
+    Peptides between 30 degrees and that limit are listed as twisted_trans_peptides:
+    they are on the trans side of the ~90 degree barrier, so unrestrained
+    minimization flattens them downhill without crossing it.
+    """
     checks.require(np.isfinite(severe_overlap) and severe_overlap >= 0.4,
                    'Severe overlap threshold must be finite and at least the 0.40 A screen')
+    checks.require(np.isfinite(max_omega_deviation) and 30 <= max_omega_deviation < 90,
+                   'Omega limit must be at least 30 and below the 90 degree barrier')
     atoms = list(topology.atoms())
     xyz = np.asarray(xyz, dtype=float)
     checks.require(xyz.shape == (len(atoms), 3) and np.isfinite(xyz).all(), 'Invalid geometry coordinates')
     contacts = heavy_contacts(topology, xyz) if contacts is None else contacts
-    peptide, omega, chirality = [], [], []
+    peptide, omega, twisted, chirality = [], [], [], []
     for ids in peptide_torsions(topology):
         length = float(np.linalg.norm(xyz[ids[1]]-xyz[ids[2]]))
         if not 1.20 <= length <= 1.45:
             peptide.append(dict(atoms=[label(atoms[i]) for i in ids[1:3]], length_angstrom=length))
         angle = dihedral(xyz[list(ids)])
         if angle is None or 180-abs(angle) > 30:
-            omega.append(dict(atoms=[label(atoms[i]) for i in ids], omega_degrees=angle))
+            row = dict(atoms=[label(atoms[i]) for i in ids], omega_degrees=angle)
+            (omega if angle is None or 180-abs(angle) > max_omega_deviation else twisted).append(row)
     for center, arms in stereocenters(topology):
         volume = float(np.linalg.det([xyz[i]-xyz[center] for i in arms]))
         if volume <= 0.5:
@@ -192,7 +201,9 @@ def geometry_report(topology, xyz, contacts=None, include_hydrogens=False,
     return dict(passed=not any(failures.values()), **failures,
                 heavy_atom_close_contacts=mild(heavy_rows), hydrogen_close_contacts=mild(hydrogen_rows),
                 one_four_contacts=[r for r in contacts if r['category'] == 'one_four_overlap'],
+                twisted_trans_peptides=twisted,
                 thresholds=dict(screen_overlap_angstrom=0.4, severe_overlap_angstrom=severe_overlap,
                                 peptide_bond_angstrom=[1.20, 1.45],
-                                max_trans_omega_deviation_degrees=30, min_chiral_volume_angstrom3=0.5),
+                                max_trans_omega_deviation_degrees=max_omega_deviation,
+                                reported_omega_deviation_degrees=30, min_chiral_volume_angstrom3=0.5),
                 scope='Standard L-proteins, trans peptides including caps; ring bond/surface intersections (not a topology proof).')
