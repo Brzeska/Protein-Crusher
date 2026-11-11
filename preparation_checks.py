@@ -174,7 +174,7 @@ def formal_charges(topology, capped):
                 force_field_partial_charges_assigned=False)
 
 
-def contact_screen(topology, xyz, indices):
+def contact_screen(topology, xyz, indices, partner_indices=None):
     atoms = list(topology.atoms())
     bonded = neighbors(topology)
     radii = np.array([RADII[a.element.symbol] for a in atoms])
@@ -211,7 +211,7 @@ def contact_screen(topology, xyz, indices):
         overlaps = radii[i] + radii - distances
         for j in np.flatnonzero(overlaps > 0.4):
             pair = tuple(sorted((i, int(j))))
-            if j in excluded or pair in seen:
+            if j in excluded or pair in seen or (partner_indices is not None and j not in partner_indices):
                 continue
             seen.add(pair)
             category = "possible_hydrogen_bond" if hbond(i, j) else (

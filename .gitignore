@@ -20,4 +20,17 @@ __pycache__/
 
 # Generated end-to-end pipeline runs
 pipeline_runs/
-tests/
+tests/*
+!tests/test_clash_cleanup.py
+
+# Direct runs of the generic scripts (the pipeline writes these under pipeline_runs/)
+*_frames.pdb
+clash_cleaned*.pdb
+clash_cleaned*.json
+geometry_gate*.json
+
+# Python environments and tool caches
+.venv/
+venv/
+.pytest_cache/
+.ipynb_checkpoints/

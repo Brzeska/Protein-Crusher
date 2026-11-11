@@ -2,7 +2,7 @@
 # Usage: bash relax_pipeline.sh raw.pdb
 # Optional environment settings: PYTHON, PH, PLATFORM, THREADS,
 # MAX_ITERATIONS, SAVE_EVERY, TOLERANCE, RUNS_DIR.
-# Requires the five generic Python scripts and preparation_checks.py beside it.
+# Requires the generic preparation, cleanup, relaxation, and validation scripts beside it.
 # A fresh run directory is always created. Exit 2 means a stage needs review.
 set -euo pipefail
 
@@ -11,7 +11,8 @@ if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
 Usage: bash relax_pipeline.sh raw.pdb
 
 Caps each continuous standard-protein chain with ACE/NME, assigns protonation
-with PROPKA, adds hydrogens, minimizes hydrogens, then minimizes all atoms.
+with PROPKA, adds hydrogens, conditionally removes heavy-atom clashes, minimizes hydrogens,
+then minimizes all atoms. Repaired structures must pass final geometry checks.
 Any input hydrogens are discarded and reassigned; OXT is replaced by the cap.
 Already-capped inputs and broken chains are rejected by the capping stage.
 Default: pH 7.0, ff14SB/GBn2, 0.15 M implicit ionic strength, 298.15 K screening,
@@ -78,7 +79,7 @@ if not math.isfinite(tol) or tol<=0:raise SystemExit('ERROR: invalid TOLERANCE')
 print(p)
 PY
 )
-for file in cap_generic.py assign_protonation_generic.py add_hydrogens_generic.py relax_hydrogens_generic.py relax_full_structure_generic.py preparation_checks.py; do
+for file in cap_generic.py assign_protonation_generic.py add_hydrogens_generic.py remove_clashes_generic.py clash_geometry.py validate_clash_output.py relax_hydrogens_generic.py relax_full_structure_generic.py preparation_checks.py; do
     if [[ ! -f "$SCRIPT_DIR/$file" ]]; then
         printf 'ERROR: required script is missing: %s/%s\n' "$SCRIPT_DIR" "$file" >&2
         exit 1
@@ -123,7 +124,7 @@ data=dict(source=str(source),input_sha256=sha(run/'raw_input.pdb'),
           ph=float(sys.argv[3]),platform=sys.argv[4],threads=int(sys.argv[5]),
           max_iterations=int(sys.argv[6]),save_every=int(sys.argv[7]),tolerance=float(sys.argv[8]),
           python=sys.executable,versions={x:importlib.metadata.version(x) for x in ('OpenMM','numpy','propka')},
-          scripts={name:sha(scripts/name) for name in ('relax_pipeline.sh','cap_generic.py','assign_protonation_generic.py','add_hydrogens_generic.py','relax_hydrogens_generic.py','relax_full_structure_generic.py','preparation_checks.py')})
+          scripts={name:sha(scripts/name) for name in ('relax_pipeline.sh','cap_generic.py','assign_protonation_generic.py','add_hydrogens_generic.py','relax_hydrogens_generic.py','relax_full_structure_generic.py','preparation_checks.py','remove_clashes_generic.py','clash_geometry.py','validate_clash_output.py')})
 (run/'run_manifest.json').write_text(json.dumps(data,indent=2)+'\n')
 PY
 
@@ -148,22 +149,30 @@ run_stage() {
     fi
 }
 
-run_stage '1/5 Capping' "$SCRIPT_DIR/cap_generic.py" \
+run_stage '1/6 Capping' "$SCRIPT_DIR/cap_generic.py" \
     --input "$RUN_DIR/raw_input.pdb" --output "$RUN_DIR/capped.pdb" --strip-hydrogens
-run_stage '2/5 Protonation assignment' "$SCRIPT_DIR/assign_protonation_generic.py" \
+run_stage '2/6 Protonation assignment' "$SCRIPT_DIR/assign_protonation_generic.py" \
     --input "$RUN_DIR/capped.pdb" --ph "$PH" --output-prefix "$RUN_DIR/protonation"
 log '[Protonation] These are provisional assignments. Uncertain sites and alternative cases are recorded in the reports; the baseline is used below.'
-run_stage '3/5 Hydrogen addition' "$SCRIPT_DIR/add_hydrogens_generic.py" \
+run_stage '3/6 Hydrogen addition' "$SCRIPT_DIR/add_hydrogens_generic.py" \
     --input "$RUN_DIR/capped.pdb" --output "$RUN_DIR/hydrogenated.pdb" \
     --ph "$PH" --variants "$RUN_DIR/protonation_variants.json"
-run_stage '4/5 Hydrogen relaxation' "$SCRIPT_DIR/relax_hydrogens_generic.py" \
-    --input "$RUN_DIR/hydrogenated.pdb" --output "$RUN_DIR/hydrogen_relaxed.pdb" \
+run_stage '4/6 Conditional clash cleanup' "$SCRIPT_DIR/remove_clashes_generic.py" \
+    --input "$RUN_DIR/hydrogenated.pdb" --output "$RUN_DIR/clash_cleaned.pdb" \
     --platform "$PLATFORM" --threads "$THREADS" --max-iterations "$MAX_ITERATIONS" \
     --save-every "$SAVE_EVERY" --tolerance "$TOLERANCE"
-run_stage '5/5 Full-atom relaxation' "$SCRIPT_DIR/relax_full_structure_generic.py" \
+log '[Cleanup] If repair ran, PROPKA assignments came from overlapping geometry; reassess affected protonation states on the cleaned structure if they matter.'
+run_stage '5/6 Hydrogen relaxation' "$SCRIPT_DIR/relax_hydrogens_generic.py" \
+    --input "$RUN_DIR/clash_cleaned.pdb" --output "$RUN_DIR/hydrogen_relaxed.pdb" \
+    --platform "$PLATFORM" --threads "$THREADS" --max-iterations "$MAX_ITERATIONS" \
+    --save-every "$SAVE_EVERY" --tolerance "$TOLERANCE"
+run_stage '6/6 Full-atom relaxation' "$SCRIPT_DIR/relax_full_structure_generic.py" \
     --input "$RUN_DIR/hydrogen_relaxed.pdb" --output "$RUN_DIR/relaxed.pdb" \
     --platform "$PLATFORM" --threads "$THREADS" --max-iterations "$MAX_ITERATIONS" \
     --save-every "$SAVE_EVERY" --tolerance "$TOLERANCE"
+run_stage 'Final geometry gate' "$SCRIPT_DIR/validate_clash_output.py" \
+    --input "$RUN_DIR/relaxed.pdb" --cleanup-report "$RUN_DIR/clash_cleaned.json" \
+    --output "$RUN_DIR/geometry_gate.json"
 CURRENT_STAGE='Final verification'
 "$PYTHON" - "$RUN_DIR" <<'PY'
 from pathlib import Path
@@ -177,7 +186,7 @@ for name,expected in [('hydrogen_relaxed','hydrogen_minimization_passed'),('rela
             raise SystemExit('ERROR: output hash mismatch: '+field)
 PY
 log ''
-log 'SUCCESS: all five stages passed. This is energy minimization, not a thermodynamic stability test.'
+log 'SUCCESS: all six stages and final verification passed. This is energy minimization, not a thermodynamic stability test.'
 log "Relaxed structure: $RUN_DIR/relaxed.pdb"
 log "Animation: $RUN_DIR/relaxed_frames.pdb"
 log "Report: $RUN_DIR/relaxed.json"
