@@ -16,7 +16,7 @@ then minimizes all atoms. Repaired structures must pass final geometry checks.
 Any input hydrogens are discarded and reassigned; OXT is replaced by the cap.
 Already-capped inputs and broken chains are rejected by the capping stage.
 Default: pH 7.0, ff14SB/GBn2, 0.15 M implicit ionic strength, 298.15 K screening,
-GPU auto-selection with CPU fallback, force tolerance 1 kJ/mol/nm,
+GPU auto-selection with CPU fallback, force tolerance 10 kJ/mol/nm (OpenMM default),
 2000 iterations per minimization, animation frames every 5 iterations.
 These are provisional modeling settings, not a validated biological protocol.
 
@@ -33,7 +33,7 @@ Optional environment variables:
   THREADS          CPU threads (default: 2)
   MAX_ITERATIONS   maximum iterations per minimization (default: 2000)
   SAVE_EVERY       optimization-frame interval (default: 5)
-  TOLERANCE        component RMS force target in kJ/mol/nm (default: 1.0)
+  TOLERANCE        component RMS force target in kJ/mol/nm (default: 10)
   RUNS_DIR         override parent directory for runs
 
 Example on a GPU pod (fail rather than fall back to CPU during minimization):
@@ -58,7 +58,7 @@ PLATFORM=${PLATFORM:-auto}
 THREADS=${THREADS:-2}
 MAX_ITERATIONS=${MAX_ITERATIONS:-2000}
 SAVE_EVERY=${SAVE_EVERY:-5}
-TOLERANCE=${TOLERANCE:-1.0}
+TOLERANCE=${TOLERANCE:-10}
 
 printf '[Preflight] Checking input, dependencies, and settings...\n'
 INPUT=$("$PYTHON" - "$1" "$PH" "$PLATFORM" "$THREADS" "$MAX_ITERATIONS" "$SAVE_EVERY" "$TOLERANCE" <<'PY'

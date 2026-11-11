@@ -144,7 +144,7 @@ def main():
     p.add_argument('--platform', choices=('auto', 'CPU', 'CUDA', 'HIP', 'Metal'), default='auto')
     p.add_argument('--threads', type=int, default=2)
     p.add_argument('--max-iterations', type=int, default=2000, help='Per alpha round')
-    p.add_argument('--tolerance', type=float, default=1.)
+    p.add_argument('--tolerance', type=float, default=10., help='Target RMS force, kJ/mol/nm')
     p.add_argument('--save-every', type=int, default=5)
     p.add_argument('--alphas', type=float, nargs='+', default=DEFAULT_ALPHAS)
     p.add_argument('--ca-k', type=float, default=1000., help='kJ/mol/nm^2; energy is k*displacement^2/2')

@@ -192,7 +192,7 @@ def main():
     p.add_argument('--temperature-k', type=float, default=298.15, help='For Debye screening only; no thermostat')
     p.add_argument('--solvent-dielectric', type=float, default=78.3)
     p.add_argument('--solute-dielectric', type=float, default=1.0)
-    p.add_argument('--tolerance', type=float, default=1.0, help='Target hydrogen RMS force, kJ/mol/nm')
+    p.add_argument('--tolerance', type=float, default=10., help='Target hydrogen RMS force, kJ/mol/nm')
     p.add_argument('--max-iterations', type=int, default=2000)
     p.add_argument('--save-every', type=int, default=5, help='Optimization iterations between saved frames')
     p.add_argument('--threads', type=int, default=2)
