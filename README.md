@@ -7,11 +7,37 @@ python -m pip install -r requirements-cuda.txt
 PLATFORM=CUDA bash relax_pipeline.sh raw.pdb
 ```
 
-The pipeline caps chains, assigns protonation with PROPKA, adds hydrogens,
-conditionally removes heavy-atom clashes, relaxes hydrogens, and relaxes all
-atoms. Each invocation creates a new run directory; exit 2 means review is
-required and later stages do not run. Candidate structures and reports remain
-available for inspection. See `bash relax_pipeline.sh --help` for settings.
+The pipeline caps chains, then draws `NSAMPLES` protonation microstates
+(default 10) at pH `PH` (default 7.0). Each sample then gets its own folder
+(`sample_001/`, ...) where hydrogens are added, heavy-atom clashes are
+conditionally removed, hydrogens are relaxed, and all atoms are relaxed. Each
+invocation creates a new run directory. If a stage in one sample fails or needs
+review, that sample stops and the others still run; the final summary and
+`samples_summary.tsv` list every sample's outcome. See
+`bash relax_pipeline.sh --help` for settings and exit codes.
+
+## Protonation sampling
+
+`sample_protonation.py` gives every ionizable side chain a protonated fraction
+from a fixed model pKa (Asp 3.9, Glu 4.1, His 6.0, Cys 8.3, Tyr 10.1, Lys 10.5,
+Arg 12.5) via Henderson–Hasselbalch, `f = 1/(1 + 10^(pH − pKa))`, then draws
+each sample by protonating every site independently with probability `f`.
+The draws are probability-weighted, so average sample results with equal weight.
+Sampling replaces enumeration because the assemblies have too many intermediate
+sites (4 His + 1 Cys per chain) to run every microstate.
+
+- Neutral His tautomers are chosen once from the input geometry: each ring N
+  scores +1 if an oxygen acceptor sits where its H would point and −1 if a donor
+  does; the H goes on the higher-scoring N, and ties go to Nε2 (HIE).
+- Tyr and Arg stay protonated (the hydrogen adder cannot build TYM or neutral
+  Arg); the script exits 2 if the pH makes either deprotonated form >1% likely.
+- Disulfide-bonded Cys stay CYX. Chains must be ACE/NME capped.
+- Limitations: model pKas ignore the protein environment, and sites are treated
+  as independent, although stacked fibril layers are electrostatically coupled.
+  Do not rank samples by raw minimized energy; they carry different numbers of protons.
+
+`protonation_report.json` records every site's fraction, the His tautomer
+evidence, the seed, and which sites each sample drew in their minority state.
 
 ## Conditional clash removal
 
@@ -110,11 +136,11 @@ piercings; it is not a proof of correct topology, unknotting, or biological
 validity. Extra geometry gates are skipped on the clean-input branch to retain
 its previous acceptance behavior. Reports state the applicable thresholds.
 
-PROPKA still runs **before** cleanup. Its estimates near severe overlaps can be
-unreliable. Protonation states are retained and this limitation is recorded;
-reassess protonation and regenerate hydrogens on the cleaned structure when
-those sites matter. Cleanup does not automatically restart the preparation
-pipeline or silently change protonation.
+Protonation is sampled **before** cleanup. The sampled states come from model
+pKas and do not depend on geometry, but His tautomers are chosen from the
+pre-cleanup geometry; reassess them on the cleaned structure when those sites
+matter. Cleanup does not automatically restart the preparation pipeline or
+silently change protonation.
 
 ## Lightweight verification
 

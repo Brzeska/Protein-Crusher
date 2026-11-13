@@ -333,30 +333,40 @@ class CliTests(unittest.TestCase):
             self.assertEqual(snapshot, openmm.XmlSerializer.serialize(original))
             self.assertEqual(report['output_sha256'], hashlib.sha256(output.read_bytes()).hexdigest())
 
-    def test_pipeline_stops_before_relaxation_when_cleanup_needs_review(self):
+    def test_pipeline_skips_relaxation_for_samples_whose_cleanup_needs_review(self):
+        # Shell orchestration only: every stage is a stub that records its name.
+        # The sampling stub makes two sample folders; cleanup "needs review" in
+        # both, so each sample stops before relaxation but both samples run.
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
             (folder/'relax_pipeline.sh').write_text((root/'relax_pipeline.sh').read_text())
-            names = ('cap_generic.py', 'assign_protonation_generic.py', 'add_hydrogens_generic.py',
+            names = ('cap_generic.py', 'sample_protonation.py', 'add_hydrogens_generic.py',
                      'remove_clashes_generic.py', 'clash_geometry.py', 'validate_clash_output.py',
                      'relax_hydrogens_generic.py', 'relax_full_structure_generic.py', 'preparation_checks.py')
-            stub = "from pathlib import Path\nimport sys\nname=Path(__file__).name\nwith (Path(__file__).parent/'called.txt').open('a') as f: f.write(name+'\\n')\nif name=='remove_clashes_generic.py': sys.exit(2)\n"
+            stub = (
+                "from pathlib import Path\n"
+                "import sys\n"
+                "name = Path(__file__).name\n"
+                "with (Path(__file__).parent/'called.txt').open('a') as f:\n"
+                "    f.write(name + '\\n')\n"
+                "if name == 'sample_protonation.py':\n"
+                "    output_dir = Path(sys.argv[sys.argv.index('--output-dir') + 1])\n"
+                "    for i in (1, 2):\n"
+                "        (output_dir/f'sample_{i:03d}').mkdir()\n"
+                "if name == 'remove_clashes_generic.py':\n"
+                "    sys.exit(2)\n")
             for name in names: (folder/name).write_text(stub)
             source = folder/'input.pdb'; self.clean_pdb(source)
-            # Shell orchestration only: stub PROPKA rather than install/run it.
-            (folder/'propka').mkdir()
-            (folder/'propka'/'__init__.py').write_text('')
-            (folder/'propka'/'run.py').write_text('')
-            (folder/'propka-3.5.1.dist-info').mkdir()
-            (folder/'propka-3.5.1.dist-info'/'METADATA').write_text('Name: propka\nVersion: 3.5.1\n')
             env = dict(os.environ, PYTHON=sys.executable, RUNS_DIR=str(folder/'runs'),
                        PYTHONPATH=str(folder)+os.pathsep+os.environ.get('PYTHONPATH', ''))
             result = subprocess.run(['bash', str(folder/'relax_pipeline.sh'), str(source)],
                                     capture_output=True, text=True, env=env, timeout=20)
             self.assertEqual(result.returncode, 2, result.stdout+result.stderr)
+            per_sample = ['add_hydrogens_generic.py', 'remove_clashes_generic.py']
             self.assertEqual((folder/'called.txt').read_text().splitlines(),
-                             ['cap_generic.py', 'assign_protonation_generic.py', 'add_hydrogens_generic.py', 'remove_clashes_generic.py'])
+                             ['cap_generic.py', 'sample_protonation.py'] + per_sample + per_sample)
+            self.assertIn('Samples: 0 passed, 2 need review, 0 failed (of 10).', result.stdout)
             self.assertNotIn('SUCCESS:', result.stdout)
 
     def test_final_gate_records_findings_without_failing_unless_strict(self):

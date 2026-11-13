@@ -251,7 +251,8 @@ def main():
                   trajectory=str(frames_path), trajectory_sha256=hashlib.sha256(frames.getvalue().encode()).hexdigest(),
                   note='Temporary softened LJ includes attraction; all original nonbonded exceptions excluded. No Coulomb/GB. '
                        'Only coordinates are handed off; downstream scripts rebuild the original force field without restraints. '
-                       'PROPKA used overlapping geometry: reassess protonation on cleaned structure if those sites matter.')
+                       'Protonation was sampled from model pKas and does not depend on geometry, but His tautomers were chosen '
+                       'from the pre-cleanup geometry: reassess them on the cleaned structure if those sites matter.')
     checks.require(sha(source) == input_hash, 'Input changed during cleanup')
     checks.write_outputs({output: text, report_path: json.dumps(report, indent=2)+'\n', frames_path: frames.getvalue()})
     print(f'Cleanup: {report["status"]}. Candidate: {output}; report: {report_path}', flush=True)
